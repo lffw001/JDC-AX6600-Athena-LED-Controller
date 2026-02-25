@@ -10,7 +10,7 @@ check_binary() {
 }
 
 # 🌟 解析单模式表格：全部拼接成一个巨长的字符串
-local single_str=""
+single_str=""
 parse_single() {
     local cfg="$1"
     local module duration

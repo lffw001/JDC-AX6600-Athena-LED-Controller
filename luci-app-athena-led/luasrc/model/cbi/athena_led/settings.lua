@@ -36,7 +36,7 @@ s1.anonymous = true
 s1.addremove = true
 s1.sortable = true  -- 开启拖拽排序
 
-s1:depends("profile_mode", "single")
+
 
 -- 模块选择 (共用选项)
 local function add_module_options(opt)
@@ -74,7 +74,6 @@ s2.anonymous = true
 s2.addremove = true
 s2.sortable = true
 
-s2:depends("profile_mode", "multi")
 
 o = s2:option(ListValue, "channel", translate("Channel ID"))
 for i = 1, 8 do o:value(tostring(i), translate("Channel ") .. i) end

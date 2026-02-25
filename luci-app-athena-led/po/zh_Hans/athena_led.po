@@ -1,14 +1,18 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=UTF-8"
 
+# ==================================
 # 标题与描述
+# ==================================
 msgid "Athena LED Controller"
 msgstr "雅典娜 LED 控制器"
 
-msgid "JDCloud AX6600 LED Screen Ctrl"
-msgstr "京东云 AX6600 点阵屏控制"
+msgid "JDCloud AX6600 LED Screen Controller (v2.0.0 Multi-Profile Edition)"
+msgstr "京东云 AX6600 点阵屏控制 (v2.0.0 多频道版)"
 
-# 板块 1: 基础设置
+# ==================================
+# 板块 1: 基础设置与模式切换
+# ==================================
 msgid "General Settings"
 msgstr "基础设置"
 
@@ -18,71 +22,97 @@ msgstr "启用"
 msgid "Brightness Level"
 msgstr "屏幕亮度"
 
-msgid "Adjust brightness (0-7)."
+msgid "Adjust screen brightness (0-7)."
 msgstr "调节屏幕亮度 (0-7)。"
 
-msgid "Loop Interval (s)"
-msgstr "轮播间隔 (秒)"
+msgid "Button & Profile Mode"
+msgstr "按键与配置模式"
 
-msgid "Time in seconds to display each module."
-msgstr "每个模块显示的持续时间（秒）。"
+msgid "Single Profile (Button skips to next module)"
+msgstr "单频道模式 (按键跳至下一模块)"
 
-msgid "Display Order & Modules"
-msgstr "显示模块与顺序"
+msgid "Multi Profile (Button switches to next channel)"
+msgstr "多频道模式 (按键切换至下一频道)"
 
-msgid "Add modules and drag to reorder."
-msgstr "添加模块并拖拽调整显示顺序。"
+msgid "<b>Single Profile:</b> All modules loop continuously. Button skips current module.<br/><b>Multi Profile:</b> Modules are grouped into channels. Button switches channels."
+msgstr "<b>单频道模式：</b> 所有模块在同一列表内循环显示，按键可跳过当前模块。<br/><b>多频道模式：</b> 模块被分组隔离到不同的频道中，按键用于在不同频道间进行切换。"
 
-# 模块名称
-msgid "Date (MM-DD)"
-msgstr "日期 (MM-DD)"
+# ==================================
+# 板块 2: 表格布局与模块选项
+# ==================================
+msgid "Single Profile Layout"
+msgstr "单频道模块编排"
 
-msgid "Time (HH:MM)"
-msgstr "时间 (HH:MM)"
+msgid "Used ONLY when <b>Single Profile</b> mode is selected. Drag to reorder."
+msgstr "仅在选中 <b>单频道模式</b> 时生效。可上下拖拽整行进行排序。"
 
-msgid "Time (Blink)"
-msgstr "时间 (闪烁效果)"
+msgid "Multi Profile Layout"
+msgstr "多频道模块编排"
 
-msgid "System Uptime"
-msgstr "系统运行时间"
+msgid "Used ONLY when <b>Multi Profile</b> mode is selected. Group modules by assigning them to the same channel."
+msgstr "仅在选中 <b>多频道模式</b> 时生效。请将模块分配到对应的频道中进行分组。"
 
-msgid "Weather"
-msgstr "当地天气"
+msgid "Channel ID"
+msgstr "所属频道"
 
-msgid "CPU Load"
-msgstr "CPU 占用率"
+msgid "Channel "
+msgstr "频道 "
 
-msgid "RAM Usage"
-msgstr "内存占用率"
+msgid "Display Module"
+msgstr "显示模块"
 
-msgid "Temperatures"
-msgstr "系统温度"
+msgid "Duration (s)"
+msgstr "持续时间 (秒)"
 
-msgid "WAN IP"
-msgstr "公网 IP"
+# --- 模块带 Emoji 的下拉选项 ---
+msgid "⌚ Time (HH:MM:SS)"
+msgstr "⌚ 时间 (时:分:秒)"
 
-msgid "Online Devices (ARP)"
-msgstr "在线设备数 (ARP)"
+msgid "⌚ Time (Blink)"
+msgstr "⌚ 时间 (闪烁效果)"
 
-msgid "Realtime Speed (RX)"
-msgstr "实时下载速度 (RX)"
+msgid "📅 Date (MM-DD)"
+msgstr "📅 日期 (月-日)"
 
-msgid "Realtime Speed (TX)"
-msgstr "实时上传速度 (TX)"
+msgid "📅 Week & Time"
+msgstr "📅 星期与时间"
 
-msgid "Total Traffic (RX)"
-msgstr "总下载流量 (RX)"
+msgid "⛅ Weather"
+msgstr "⛅ 当地天气"
 
-msgid "Total Traffic (TX)"
-msgstr "总上传流量 (TX)"
+msgid "💻 CPU Load"
+msgstr "💻 CPU 占用率"
 
-msgid "Custom Text"
-msgstr "自定义文本"
+msgid "💻 RAM Usage"
+msgstr "💻 内存占用率"
 
-msgid "HTTP Request Result"
-msgstr "HTTP 请求结果"
+msgid "🌡️ Temperatures"
+msgstr "🌡️ 系统温度"
 
-# 板块 2: 网络设置
+msgid "🌐 Realtime Speed"
+msgstr "🌐 实时网速拆分"
+
+msgid "🌐 NIC Status"
+msgstr "🌐 网口连通状态"
+
+msgid "📝 Custom Text"
+msgstr "📝 自定义文本"
+
+msgid "🔗 HTTP API"
+msgstr "🔗 HTTP API 接口"
+
+msgid "📈 Stock Trend"
+msgstr "📈 股票行情趋势"
+
+msgid "🌍 WAN IP"
+msgstr "🌍 广域网 IP"
+
+msgid "📱 Online Devices"
+msgstr "📱 局域网设备数"
+
+# ==================================
+# 板块 3: 网络设置
+# ==================================
 msgid "Network Settings"
 msgstr "网络设置"
 
@@ -98,7 +128,9 @@ msgstr "WAN IP 查询接口"
 msgid "Select a preset or enter custom URL."
 msgstr "选择预设或输入自定义 URL。"
 
-# 板块 3: 传感器与天气
+# ==================================
+# 板块 4: 传感器与天气
+# ==================================
 msgid "Sensor & Weather"
 msgstr "传感器与天气"
 
@@ -108,7 +140,6 @@ msgstr "温度传感器"
 msgid "Select sensors to cycle through."
 msgstr "选择需要轮播显示的传感器。"
 
-# 传感器名称 (保持原名或简单翻译)
 msgid "nss-top"
 msgstr "NSS-Top"
 
@@ -136,44 +167,84 @@ msgstr "天气数据源"
 msgid "City Name"
 msgstr "城市名称"
 
-msgid "Pinyin or English."
-msgstr "请输入拼音或英文 (如 Beijing)。"
+msgid "Pinyin, English, or 'auto'."
+msgstr "请输入拼音、英文，或输入 'auto' 自动定位。"
 
 msgid "Weather Format"
 msgstr "天气显示格式"
 
-msgid "Simple (Icon + Temp)"
-msgstr "简约 (图标+温度)"
+msgid "Simple (Static Icon + Temp)"
+msgstr "简约 (静态图标防抖 + 温度)"
 
-msgid "Full (Original)"
-msgstr "完整 (原始格式)"
+msgid "Full (Rolling Text)"
+msgstr "完整 (长文本平滑滚动)"
 
-msgid "Simple mode keeps only the first number to fit screen."
-msgstr "简约模式只保留首个数字以适应屏幕宽度。"
+msgid "Simple mode prevents scrolling and locks position. Full mode rolls long text."
+msgstr "简约模式会锁定显示位置并防止滚动。完整模式会平滑滚动显示附带极值的天气长文本。"
 
 msgid "Seniverse API Key"
 msgstr "心知天气 API 密钥"
 
-# 板块 4: 自定义内容
-msgid "Custom Content"
-msgstr "自定义内容"
+# ==================================
+# 板块 5: 自定义内容与 API
+# ==================================
+msgid "Custom Content & APIs"
+msgstr "自定义内容与拓展 API"
 
-msgid "Effective only when 'Custom Text' is added to Display Order."
-msgstr "仅当“自定义文本”被添加到显示顺序时生效。"
+msgid "Custom Text (banner)"
+msgstr "自定义文本 (banner)"
 
-msgid "HTTP Request URL"
-msgstr "HTTP 请求地址"
+msgid "Shown when 'banner' is in the profile."
+msgstr "当所选频道中包含 'banner' 模块时显示。"
 
-msgid "Effective only when 'HTTP Request Result' is added to Display Order."
-msgstr "仅当“HTTP 请求结果”被添加到显示顺序时生效。"
+msgid "Stock API URL (stock)"
+msgstr "股票 API 地址 (stock)"
+
+msgid "Shown when 'stock' is in the profile."
+msgstr "当所选频道中包含 'stock' 模块时显示。"
+
+msgid "HTTP Request URL (http_custom)"
+msgstr "HTTP 请求地址 (http_custom)"
+
+msgid "Shown when 'http_custom' is in the profile."
+msgstr "当所选频道中包含 'http_custom' 模块时显示。"
+
+msgid "HTTP Cache Time (s)"
+msgstr "HTTP 缓存时间 (秒)"
+
+msgid "Cache API results to prevent rate limiting."
+msgstr "缓存接口请求结果，防止频率过高被限流封禁。"
 
 msgid "HTTP Max Length"
 msgstr "HTTP 最大显示长度"
 
-msgid "Max characters to display (defaults to 15). Set higher for longer text."
-msgstr "最大显示字符数 (默认 15)。如需显示长文本请调大此值。"
+msgid "Max characters to display (defaults to 15)."
+msgstr "最大显示字符数 (默认 15)。如需完整滚动长文本请调大此值。"
 
-# 板块 5: 定时休眠
+# ==================================
+# 板块 6: 硬件 LED 状态灯控制
+# ==================================
+msgid "Hardware LED Switches"
+msgstr "硬件 LED 状态灯控制"
+
+msgid "Check the box to <b>Turn OFF (Disable)</b> specific status LEDs on the router."
+msgstr "勾选对应选项以<b>永久关闭（熄灭）</b>路由器机身上的特定物理状态指示灯。"
+
+msgid "Disable Clock LED (CPU/Mem)"
+msgstr "熄灭【时钟灯】(对应 CPU/内存负载)"
+
+msgid "Disable Medal LED (Internet)"
+msgstr "熄灭【勋章灯】(对应 网络连通状态)"
+
+msgid "Disable Upload LED (Arrow Up)"
+msgstr "熄灭【上箭头灯】(对应 数据上传指示)"
+
+msgid "Disable Download LED (Arrow Down)"
+msgstr "熄灭【下箭头灯】(对应 数据下载指示)"
+
+# ==================================
+# 板块 7: 定时休眠
+# ==================================
 msgid "Scheduled Sleep"
 msgstr "定时休眠"
 
@@ -184,15 +255,17 @@ msgid "Screen Off Time"
 msgstr "屏幕关闭时间"
 
 msgid "HH:MM format (e.g. 23:00)."
-msgstr "HH:MM 格式 (例如 23:00)。"
+msgstr "请输入 HH:MM 格式 (例如 23:00)。"
 
 msgid "Screen On Time"
 msgstr "屏幕开启时间"
 
 msgid "HH:MM format (e.g. 07:00)."
-msgstr "HH:MM 格式 (例如 07:00)。"
+msgstr "请输入 HH:MM 格式 (例如 07:00)。"
 
-# 板块 6: 服务控制
+# ==================================
+# 板块 8: 服务控制与状态
+# ==================================
 msgid "Service Control"
 msgstr "服务控制"
 
@@ -200,10 +273,25 @@ msgid "Restart Service"
 msgstr "重启服务"
 
 msgid "Force restart the process immediately."
-msgstr "立即强制重启进程。"
+msgstr "保存配置并立即强制重启后台守护进程。"
 
 msgid "Stop Service"
 msgstr "停止服务"
 
 msgid "Stop the process (Will restart on reboot if Enabled is checked)."
-msgstr "停止进程 (若“启用”被勾选，重启路由器后会自动启动)。"
+msgstr "停止进程 (若“启用”被勾选，路由器重启后仍会自动启动)。"
+
+msgid "Running Status"
+msgstr "运行状态"
+
+msgid "Collecting data..."
+msgstr "正在获取运行状态..."
+
+msgid "RUNNING"
+msgstr "运行中"
+
+msgid "NOT RUNNING"
+msgstr "未运行"
+
+msgid "Unknown Error"
+msgstr "未知错误"
