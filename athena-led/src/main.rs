@@ -32,7 +32,7 @@ pub mod led_screen {
         }
         
         // 模拟屏幕数据写入
-        pub fn write_data(&mut self, data: &[u8], flag: u8) -> Result<()> {
+        pub async fn write_data(&mut self, data: &[u8], flag: u8) -> Result<()> {
             // 把字节转回字符串
             let text = String::from_utf8_lossy(data);
             println!("📺 [屏幕输出 | 状态灯:{}] => {}", flag, text);
@@ -40,7 +40,8 @@ pub mod led_screen {
         }
     }
 }
-// --------------------------------------------------------
+
+
 
 use anyhow::{Context, Result};
 use clap::Parser;           
@@ -52,6 +53,8 @@ use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
 use regex::Regex;
+
+
 
 // --- [新] uapis.cn 天气结构体 ---
 #[derive(Deserialize, Debug)]
@@ -78,6 +81,7 @@ struct SeniverseResult {
     daily: Vec<SeniverseDaily>,
 }
 #[derive(Deserialize, Debug)]
+#[allow(dead_code)]
 struct SeniverseLocation {
 
 }
@@ -120,6 +124,7 @@ struct OmGeoResponse {
 }
 
 #[derive(Deserialize, Debug)]
+#[allow(dead_code)]
 struct OmLocation {
     name: String,
     latitude: f64,
@@ -242,6 +247,8 @@ impl SystemMonitor {
             // [新增] 自动定位缓存，避免频繁请求 IP 接口
             auto_location: String::new(),
         })
+
+        
     }
 
     // ==========================================
@@ -341,16 +348,7 @@ impl SystemMonitor {
     } 
     
     
-    // 初始化数据（避免第一次显示数值暴涨）
-    fn init(&mut self) {
-        let (rx, tx) = self.read_net_bytes();
-        self.last_rx_bytes = rx;
-        self.last_tx_bytes = tx;
-        
-        let (total, idle) = self.read_cpu_stats();
-        self.last_cpu_total = total;
-        self.last_cpu_idle = idle;
-    }
+
 
     // --- 底层读取函数 ---
     
@@ -1090,8 +1088,11 @@ fn get_seconds_until_wake(wake_time_str: &str) -> u64 {
         Err(_) => return 60, // 解析失败兜底
     };
 
-    // 2. 构造今天的唤醒时间点
-    let mut target_dt = now.date_naive().and_time(wake_time).and_local_timezone(Local).unwrap();
+    // 2. 构造今天的唤醒时间点 (安全处理夏令时/不存在的时间)
+    let mut target_dt = match now.date_naive().and_time(wake_time).and_local_timezone(Local).latest() {
+        Some(dt) => dt,
+        None => return 60, // 如果遇到极其罕见的夏令时跳跃导致时间不存在，兜底睡 60 秒后重试
+    };
 
     // 3. 如果唤醒时间比现在早 (比如现在23:00, 唤醒是07:00)，说明是"明天"
     if target_dt <= now {
@@ -1168,7 +1169,15 @@ struct Args {
     // [核心升级] 智能 Profile 数组！
     // 允许传入多个 --profile，比如：
     // --profile "time#2 weather#5" --profile "netspeed_down"
-    #[arg(long = "profile")]
+    #[arg(
+        long = "profile", 
+        num_args = 1.., 
+        default_values = [
+            "time_sec#10 weather#10",   // 第 1 台：时间与天气
+            "cpu#5 mem#5 temp#5",       // 第 2 台：系统监控
+            "traffic_split#5 nic#5"     // 第 3 台：网络状态
+        ]
+    )]
     profile: Vec<String>,
 
     // --- 网络与接口配置 ---
@@ -1263,29 +1272,61 @@ fn set_timezone_from_config() -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // set_timezone_from_config().unwrap_or(());
+// 1. 生成 PID 文件
+    let pid = std::process::id();
+    if let Err(e) = std::fs::write("/var/run/athena-led.pid", pid.to_string()) {
+        println!("⚠️ [警告] 无法写入 PID 文件: {}", e);
+    } else {
+        println!("📝 [系统] 进程 PID ({}) 已写入 /var/run/athena-led.pid", pid);
+    }
+
     let _ = set_timezone_from_config();
     let args = Args::parse();
     
+    // ==========================================
+    // 🌟 优雅退出的核心开关（有且只能有这一组！）
+    // ==========================================
+    let running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let running_for_listener = std::sync::Arc::clone(&running);
+    
+    // 初始化屏幕
     let mut screen = led_screen::LedScreen::new(581, 582, 585, 586)
         .context("Failed to init screen")?;
     screen.power(true, args.light_level)?;
     
+    // 初始化系统监控
     let mut monitor = SystemMonitor::new(args.net_interface.clone())
         .context("Failed to initialize system monitor")?;
     
-    // 跨平台信号通道
+    // 初始化通信频道
     let (tx, mut rx) = tokio::sync::watch::channel(1i32);
+
+    // ==========================================
+    // 🌟 启动监听器（有且只能调用一次！）
+    // ==========================================
+    spawn_button_listener(tx.clone(), running_for_listener);
     
-    // 启动按键监听守护进程
-    spawn_button_listener(tx.clone());
+
 
     loop {
         tokio::select! {
             _ = tokio::signal::ctrl_c() => { 
                 println!("🛑 收到退出信号，准备关屏退出...");
+                
+                // 🌟 [核心改动 C]: 告诉后台监听线程该下班了
+                running.store(false, std::sync::atomic::Ordering::SeqCst);
+
+                // 关屏逻辑
+                let _ = screen.write_data(b"         ", 0).await;
                 let _ = screen.power(false, 0); 
-                break; 
+
+                // 🌟 [核心改动 D]: 稍微等一下（100ms），给后台线程“跳出循环”的时间
+                tokio::time::sleep(Duration::from_millis(100)).await;
+
+                // 删掉 PID 文件（强迫症福音，保持系统整洁）
+                let _ = std::fs::remove_file("/var/run/athena-led.pid");
+                
+                break;
             },
             
             // 进入超级调度引擎
@@ -1296,38 +1337,74 @@ async fn main() -> Result<()> {
 }
 
 // ==========================================
-// 🐧 Linux 环境下的真实按键监听器
+// 🐧 Linux 环境下的【零分配 + 优雅退出版】监听器
 // ==========================================
 #[cfg(unix)]
-fn spawn_button_listener(tx: tokio::sync::watch::Sender<i32>) {
-    // 把只有 Linux 才有的库放在这里局部引入
-    use tokio::signal::unix::{signal, SignalKind};
-    
-    tokio::spawn(async move {
-        let mut sig_usr1 = signal(SignalKind::user_defined1()).expect("无法监听 SIGUSR1");
-        let mut sig_usr2 = signal(SignalKind::user_defined2()).expect("无法监听 SIGUSR2");
+fn spawn_button_listener(
+    tx: tokio::sync::watch::Sender<i32>, 
+    running: std::sync::Arc<std::sync::atomic::AtomicBool> // 🌟 增加参数
+) {
+    use std::fs::File;
+    use std::io::{Read, Seek, SeekFrom};
+    use std::time::Duration;
+    use std::sync::atomic::Ordering; // 🌟 引入内存顺序规范
 
-        loop {
-            tokio::select! {
-                _ = sig_usr1.recv() => {
-                    let current = *tx.borrow();
-                    if current > 0 { let _ = tx.send(current + 1); }
-                }
-                _ = sig_usr2.recv() => {
-                    let current = *tx.borrow();
-                    let _ = tx.send(if current > 0 { -1 } else { 1 });
-                }
+    tokio::task::spawn_blocking(move || {
+        println!("🎮 [系统] 启动终极 GPIO71 硬件雷达监听模式...");
+
+        let mut file = match File::open("/sys/kernel/debug/gpio") {
+            Ok(f) => f,
+            Err(e) => {
+                println!("⚠️ [警告] 无法打开底层 GPIO 调试接口: {}", e);
+                return;
             }
+        };
+
+        let mut buffer = String::with_capacity(4096);
+        let mut was_pressed = false;
+
+        // 🌟 将 loop 替换为 while，每次循环检查开关状态
+        while running.load(Ordering::SeqCst) {
+            buffer.clear();
+            let _ = file.seek(SeekFrom::Start(0));
+
+            if file.read_to_string(&mut buffer).is_ok() {
+                let is_pressed = buffer.contains("gpio71  : in  low");
+
+                if !was_pressed && is_pressed {
+                    println!("💡 [DEBUG] 拦截到 GPIO71 按下！强制切换屏幕！");
+                    
+                    let current = *tx.borrow();
+                    if current > 0 { 
+                        let _ = tx.send(current + 1); 
+                    }
+                    
+                    std::thread::sleep(Duration::from_millis(300));
+                }
+                
+                was_pressed = is_pressed;
+            }
+
+            // 100ms 轮询
+            std::thread::sleep(Duration::from_millis(100));
         }
+
+        // 🌟 循环结束后打印，证明线程已关闭
+        println!("👋 [系统] 按钮监听线程已安全退出。");
     });
 }
 
 // ==========================================
 // 🪟 Windows 环境下的“空壳”监听器 (防报错)
 // ==========================================
-#[cfg(not(unix))]
-fn spawn_button_listener(_tx: tokio::sync::watch::Sender<i32>) {
-    println!("⚠️ [Windows 本地调试模式] 已自动跳过物理按键绑定。");
+#[cfg(windows)]
+// 🌟 增加第二个参数声明，哪怕不用它，也要让签名保持一致
+fn spawn_button_listener(
+    _tx: tokio::sync::watch::Sender<i32>, 
+    _running: std::sync::Arc<std::sync::atomic::AtomicBool>
+) {
+    // Windows 模拟器不需要物理按键监听，所以这里保持空或者加行打印
+    println!("📺 [Windows 模拟器] 按键监听已就绪（空跑模式）");
 }
 
 async fn process_loop(
@@ -1365,7 +1442,7 @@ async fn process_loop(
     loop {
         // [处理长按息屏]
         if *rx.borrow() < 0 {
-            screen.write_data(b"        ", 0)?; 
+            screen.write_data(b"        ", 0).await?; 
             screen.power(false, 0)?; 
             let _ = rx.wait_for(|&val| val > 0).await; 
             screen.power(true, args.light_level)?; 
@@ -1374,7 +1451,7 @@ async fn process_loop(
 
         // [处理夜间休眠]
         if is_sleep_time(&args.sleep_start, &args.sleep_end) {
-            screen.write_data(b"        ", 0)?; 
+            screen.write_data(b"        ", 0).await?; 
             screen.power(false, 0)?; 
             let sleep_sec = get_seconds_until_wake(&args.sleep_end);
             tokio::select! {
@@ -1453,7 +1530,7 @@ async fn process_loop(
                         if time_flag { time_str = time_str.replace(':', ";"); }
                         
                         // [修改点] 使用 get_leds
-                        screen.write_data(time_str.as_bytes(), get_leds(monitor, args))?;
+                        screen.write_data(time_str.as_bytes(), get_leds(monitor, args)).await?;
                         
                         if last_tick.elapsed().as_secs() >= 1 {
                             time_flag = !time_flag;
@@ -1468,13 +1545,13 @@ async fn process_loop(
                     }
                 }
 
-                // --- [新增] 动态模块 2: 带秒数的精准时钟 (数字每秒跳动，冒号常亮) ---
+
                 "time_sec" => {
                     let start = Instant::now();
                     while start.elapsed() < Duration::from_secs(module.duration) {
-                        let time_str = Local::now().format("%H:%M:%S").to_string();
+                        let time_str = Local::now().format("%H^%M^%S").to_string();
                         
-                        screen.write_data(time_str.as_bytes(), get_leds(monitor, args))?;
+                        screen.write_data(time_str.as_bytes(), get_leds(monitor, args)).await?;
                         
                         tokio::select! {
                             _ = tokio::time::sleep(Duration::from_millis(100)) => {}
@@ -1497,7 +1574,7 @@ async fn process_loop(
                             Local::now().format("%H:%M").to_string()
                         };
                         
-                        screen.write_data(display_text.as_bytes(), get_leds(monitor, args))?;
+                        screen.write_data(display_text.as_bytes(), get_leds(monitor, args)).await?;
                         
                         tokio::select! {
                             _ = tokio::time::sleep(Duration::from_millis(100)) => {}
@@ -1506,51 +1583,81 @@ async fn process_loop(
                     }
                 }
                 
-                // --- 动态模块 2: 天气动画 ---
+
+                // --- 动态模块 2: 天气动画 (智能双模版：静态防抖 + 循环滚动) ---
                 "weather" => {
                     let full_text = monitor.get_smart_weather(&args.weather_city, &args.weather_source, &args.seniverse_key).await;
                     let (static_icon, raw_rest) = match full_text.split_once(' ') {
                         Some((icon, rest)) => (icon, rest),
                         None => {
-                            // [修改点] 使用 get_leds
-                            screen.write_data(full_text.as_bytes(), get_leds(monitor, args))?;
+                            // [修改点] 解析失败时，使用静态防抖函数直接显示，防止极端乱码卡死
+                            let _ = screen.write_data(full_text.as_bytes(), get_leds(monitor, args)).await;
                             module_idx += 1;
                             continue;
                         }
                     };
                     
                     let clean_rest = raw_rest.trim();
-                    let temp_part_str = if args.weather_format == "simple" {
+                    let status_leds = get_leds(monitor, args);
+                    
+                    // 🌟 记录这个模块开始的绝对时间，用于整体倒计时控制
+                    let start_module = Instant::now();
+
+                    if args.weather_format == "simple" {
+                        // ==========================================
+                        // 【策略 A】精简模式：截取数字，原地动画 + 强制静态
+                        // ==========================================
                         let mut temp_val = String::new();
                         for (i, c) in clean_rest.chars().enumerate() {
                             if (i == 0 && c == '-') || c.is_ascii_digit() || c == '.' { temp_val.push(c); } 
                             else { break; }
                         }
-                        if temp_val.starts_with('-') { temp_val } else { format!("{}℃", temp_val) }
-                    } else {
-                        format!(" {}", clean_rest) 
-                    };
+                        let temp_part_str = if temp_val.starts_with('-') { temp_val } else { format!("{}℃", temp_val) };
 
-                    let start = Instant::now();
-                    let mut frame_flag = true;
-                    let mut last_frame = Instant::now();
-                    
-                    while start.elapsed() < Duration::from_secs(module.duration) {
-                        let dynamic_icon = monitor.get_animated_icon(static_icon, frame_flag);
-                        let display_text = format!("{}{}", dynamic_icon, temp_part_str);
+                        let mut frame_flag = true;
+                        let mut last_frame = Instant::now();
                         
-                        // [修改点] 使用 get_leds
-                        screen.write_data(display_text.as_bytes(), get_leds(monitor, args))?;
-                        
-                        if last_frame.elapsed().as_millis() >= 500 {
-                            frame_flag = !frame_flag;
-                            last_frame = Instant::now();
+                        while start_module.elapsed() < Duration::from_secs(module.duration) {
+                            let dynamic_icon = monitor.get_animated_icon(static_icon, frame_flag);
+                            let display_text = format!("{}{}", dynamic_icon, temp_part_str);
+                            
+                            // [修改点] 强制静态锁死，彻底解决图标闪烁导致的左右横跳
+                            let _ = screen.write_data(display_text.as_bytes(), status_leds).await;
+                            
+                            if last_frame.elapsed().as_millis() >= 500 {
+                                frame_flag = !frame_flag;
+                                last_frame = Instant::now();
+                            }
+
+                            // 100ms 智能监听按键
+                            tokio::select! {
+                                _ = tokio::time::sleep(Duration::from_millis(100)) => {}
+                                Ok(_) = rx.changed() => { module_interrupted = true; break; }
+                            }
                         }
-
-                        // [修改点] 100ms 智能监听
-                        tokio::select! {
-                            _ = tokio::time::sleep(Duration::from_millis(100)) => {}
-                            Ok(_) = rx.changed() => { module_interrupted = true; break; }
+                    } else {
+                        // ==========================================
+                        // 【策略 B】完整模式：长文本滚动 + 停顿 1 秒循环
+                        // ==========================================
+                        let display_text = format!("{} {}", static_icon, clean_rest);
+                        
+                        while start_module.elapsed() < Duration::from_secs(module.duration) {
+                            tokio::select! {
+                                // 🌟 核心逻辑：滚动动作 + 1秒停顿 作为一个整体异步执行
+                                _ = async {
+                                    // 1. 调用原生 write_data 执行完整的从右到左滚动
+                                    let _ = screen.write_data(display_text.as_bytes(), status_leds).await;
+                                    // 2. 滚出屏幕后，静止等待 1 秒
+                                    tokio::time::sleep(Duration::from_secs(1)).await;
+                                } => {
+                                    // 一轮完整的“滚+停”正常结束，进入下一次 while 循环，重新开始滚
+                                }
+                                // 🌟 随时监听：无论是正在滚动，还是正在 1 秒停顿中，按键都能秒切
+                                Ok(_) = rx.changed() => { 
+                                    module_interrupted = true; 
+                                    break; 
+                                }
+                            }
                         }
                     }
                 }
@@ -1578,17 +1685,26 @@ async fn process_loop(
                 continue;
             }
 
-            // === [核心剥离] 静态模块的 100ms 智能渲染层 ===
+            // === [核心剥离] 静态模块的智能渲染层 ===
             if !text_to_show.is_empty() {
                 let module_start_time = Instant::now();
                 while module_start_time.elapsed() < Duration::from_secs(module.duration) {
                     
-                    // [修改点] 每 100ms 刷新一次文字 + 过滤后的全局 LED 状态
-                    screen.write_data(text_to_show.as_bytes(), get_leds(monitor, args))?;
-
+                    // 🌟 神级打断逻辑：画图和按键同时进行！
                     tokio::select! {
-                        _ = tokio::time::sleep(Duration::from_millis(100)) => {}
-                        Ok(_) = rx.changed() => { module_interrupted = true; break; }
+                        // 🏃‍♂️ 赛道 1：执行画图（即使滚很久）并休眠 100ms
+                        _res = async {
+                            let _ = screen.write_data(text_to_show.as_bytes(), get_leds(monitor, args)).await;
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                        } => {
+                            // 赛道 1 正常跑完（一帧画完了），什么都不做，继续下一轮循环
+                        }
+                        
+                        // 🏃‍♂️ 赛道 2：按键狙击手！只要一按，瞬间掐死赛道 1 的画图过程！
+                        Ok(_) = rx.changed() => { 
+                            module_interrupted = true; 
+                            break; 
+                        }
                     }
                 }
                 

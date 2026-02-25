@@ -26,11 +26,14 @@ end
 
 function act_status()
     local e = {}
-    -- [关键修改] 检查进程是否存在
-    -- pgrep -f /usr/bin/athena-led
-    -- 如果返回 0 表示进程存在(正在运行)，否则表示没运行
-    -- 注意：请确保你的二进制文件确实在 /usr/bin/ 下
-    e.running = sys.call("pgrep -f /usr/bin/athena-led >/dev/null") == 0
+    -- 获取真实 PID 字符串 (去掉末尾的换行符)
+    local pid = sys.exec("pgrep -f /usr/bin/athena-led | head -n 1")
+    if pid and pid ~= "" then
+        e.running = true
+        e.pid = string.gsub(pid, "\n", "")
+    else
+        e.running = false
+    end
     
     http.prepare_content("application/json")
     http.write_json(e)

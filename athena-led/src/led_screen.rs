@@ -55,35 +55,60 @@ impl LedScreen {
         Ok(())
     }
 
-pub fn write_data(&mut self, text: &[u8], status: u8) -> Result<()> {
+    // 2. 这里也要加上 async 关键字
+    pub async fn write_data(&mut self, text: &[u8], status: u8) -> Result<()> {
         let mut display_data = Vec::new();
         
-        // [核心修复] 
-        // 1. 尝试把字节流转成 UTF-8 字符串
-        // 2. 按【字符】(chars) 遍历，而不是按字节
-        // 这样 '℃'、'☀' 这种多字节符号才能被正确识别！
         let content = std::str::from_utf8(text).unwrap_or("");
         
         for ch in content.chars() {
-            // 统一转大写匹配 (兼容 a-z)
             let key = ch.to_ascii_uppercase(); 
             
             if let Some(bytes) = CHAR_DICT.get(&key) {
                 display_data.extend_from_slice(bytes);
-                // 统一加 1 列间距
-                display_data.push(0x00); 
+                display_data.push(0x00); // 加空格
             }
         }
 
+        // 修复：砍掉最后一个多余的尾部空格！
+        // 这样 28 列的 "10:10:10" 就会瞬间变成 27 列！
+        if !display_data.is_empty() {
+            display_data.pop(); 
+        }
+
+        // 判断逻辑完全不需要改，保持 27 即可
         if display_data.len() > 27 {
-            self.flow(&display_data, status)?;
+            self.flow(&display_data, status).await?;
         } else {
             self.static_display(&display_data, status)?;
         }
         Ok(())
     }
 
-    fn flow(&mut self, data: &[u8], status: u8) -> Result<()> {
+    // 🌟 专为动态模块（天气、时间）设计的“强制静态、完美居中、零浪费”特化方法
+
+    pub async fn write_data_static(&mut self, text: &[u8], status: u8) -> Result<()> {
+        let mut display_data = Vec::new();
+        let content = std::str::from_utf8(text).unwrap_or("");
+        
+        for ch in content.chars() {
+            let key = ch.to_ascii_uppercase(); 
+            if let Some(bytes) = CHAR_DICT.get(&key) {
+                display_data.extend_from_slice(bytes);
+                display_data.push(0x00); 
+            }
+        }
+
+        if !display_data.is_empty() {
+            display_data.pop(); 
+        }
+
+        self.static_display(&display_data, status)?;
+        Ok(())
+    }
+
+    // 1. 加上 async 关键字
+    async fn flow(&mut self, data: &[u8], status: u8) -> Result<()> {
         let mut start = 0;
         for i in 1..=data.len() {
             let mut off = [0u8; 27];
@@ -92,7 +117,10 @@ pub fn write_data(&mut self, text: &[u8], status: u8) -> Result<()> {
             }
             off[..i.min(27)].copy_from_slice(&data[start..start + i.min(27)]);
             self.do_write_data(&off, status)?;
-            std::thread::sleep(std::time::Duration::from_millis(128));
+            
+            // 🚨 核心修复：把原先的 std::thread::sleep 换成 tokio 的异步 sleep！
+            // 这样休眠时，程序立刻把控制权交还给主线程去检查按键！
+            tokio::time::sleep(std::time::Duration::from_millis(128)).await;
         }
         Ok(())
     }

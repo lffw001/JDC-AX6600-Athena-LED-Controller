@@ -46,8 +46,7 @@ pub static CHAR_DICT: Lazy<HashMap<char, Vec<u8>>> = Lazy::new(|| {
     
     // --- Special characters (符号) ---
     dict.insert(' ', vec![0b00000000]); 
-    // [隐形冒号]
-    dict.insert(';', vec![0b00000000, 0b00000000, 0b00000000]);
+
     dict.insert('-', vec![0b00000100, 0b00000100, 0b00000100]);
     dict.insert('_', vec![0b00010000, 0b00010000, 0b00010000]);
     dict.insert('=', vec![0b00001010, 0b00001010, 0b00001010]);
@@ -56,7 +55,12 @@ pub static CHAR_DICT: Lazy<HashMap<char, Vec<u8>>> = Lazy::new(|| {
     dict.insert('/', vec![0b00011000, 0b00000110, 0b00000001]);
     dict.insert('\\', vec![0b00000001, 0b00000110, 0b00011000]);
     dict.insert('.', vec![0b00010000]);
+    
     dict.insert(':', vec![0b00000000, 0b00001010, 0b00000000]);
+    // [隐形冒号]
+    dict.insert(';', vec![0b00000000, 0b00000000, 0b00000000]);
+    // [新增] 紧凑版冒号！专供 time_sec 模式使用，只有一列宽！
+    dict.insert('^', vec![0b00001010]);
     dict.insert('℃', vec![
         // 1. 左上角的“点” (2个像素高，实心)
         // 0b00000011 表示最上面两颗灯亮，看起来像个点
@@ -125,6 +129,7 @@ pub static CHAR_DICT: Lazy<HashMap<char, Vec<u8>>> = Lazy::new(|| {
         0b00001111, // **** (Bit 0-3 - 云身)
         0b00001111, // **** (Bit 0-3 - 云身)
         0b00000110, // ..** 0b00000000 
+        0b00000000, 
     ]);
     // Frame 2: 🌥 (整体右移)
     dict.insert('🌥', vec![
