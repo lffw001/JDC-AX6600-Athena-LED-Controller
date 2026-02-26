@@ -1,5 +1,5 @@
 msgid ""
-msgstr "Content-Type: text/plain; charset=UTF-8"
+msgstr "Content-Type: text/plain; charset=UTF-8\n"
 
 # ==================================
 # 标题与描述
@@ -365,7 +365,6 @@ msgstr "音频子系统 (LPASS)"
 
 msgid "DDR"
 msgstr "DDR 内存"
-
 
 # ==================================
 # 极客按键引脚配置

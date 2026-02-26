@@ -77,16 +77,17 @@ local function add_module_options(opt)
     opt:value("stock", translate("📈 Stock Trend"))
 end
 
+
 -- ==========================================
--- 🌟 2. 二级参数菜单：多合一动态参数列 (Combobox)
+-- 🌟 2. 二级参数菜单：多合一动态参数列 (瘦身过滤版)
 -- ==========================================
 local function add_module_params(section)
-    -- 使用 Value，配合 :value() 注入，LuCI 会自动渲染成下拉组合框
+    -- 使用 Value，配合 :value() 注入，LuCI 会自动渲染成可手写+可下拉的组合框
     local o_param = section:option(Value, "param", translate("Module Parameter"))
-    o_param.description = translate("Select or type the parameter for the module. Leave empty if none.")
+    o_param.description = translate("Select an option or type custom value. Leave empty if none.")
     o_param.rmempty = true
     
-    -- 🕒 【时间类参数】
+    -- 🕒 【时间类参数】(常用放最前)
     o_param:value("timeBlink", translate("⌚ [Time] Blink (Default)"))
     o_param:value("time_sec",  translate("⌚ [Time] HH:MM:SS"))
     o_param:value("time",      translate("⌚ [Time] Static"))
@@ -104,9 +105,18 @@ local function add_module_params(section)
     o_param:value("5", translate("🌡️ [Temp] LPASS"))
     o_param:value("6", translate("🌡️ [Temp] DDR"))
 
-    -- 🌐 【网卡类参数】
+    -- 🌐 【网卡类参数】(🌟 核心优化：过滤辣鸡虚拟网卡)
     for _, dev in ipairs(sys.net.devices()) do
-        if dev ~= "lo" then 
+        -- 过滤掉绝大多数没人看的虚拟网卡前缀
+        if not dev:match("^lo$") and 
+           not dev:match("^sit") and 
+           not dev:match("^gre") and 
+           not dev:match("^ifb") and 
+           not dev:match("^ip6") and 
+           not dev:match("^teql") and 
+           not dev:match("^erspan") and 
+           not dev:match("^miireg") and 
+           not dev:match("^phy") then
             o_param:value(dev, translate("🌐 [Net] ") .. dev) 
         end
     end
