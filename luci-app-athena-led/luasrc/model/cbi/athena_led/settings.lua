@@ -1,7 +1,6 @@
 local sys = require "luci.sys"
 local http = require "luci.http"         -- 🌟 防呆引入
 local dispatcher = require "luci.dispatcher" -- 🌟 防呆引入
-local sys = require "luci.sys"
 
 m = Map("athena_led", translate("Athena LED Controller"), translate("JDCloud AX6600 LED Screen Controller (v2.0.0 Multi-Profile Edition)"))
 
@@ -46,20 +45,19 @@ s1.addremove = true
 s1.sortable = true  -- 开启拖拽排序
 
 
-
 -- ==========================================
 -- 🌟 1. 主菜单：极限瘦身版
 -- ==========================================
 local function add_module_options(opt)
     -- 1. 组合类
-    opt:value("time_group", translate("🕒 Time & Date"))  -- 🌟 把 7 个选项合并成了这 1 个！
+    opt:value("time_group", translate("🕒 Time & Date"))  
     opt:value("weather", translate("⛅ Local Weather"))
     
     -- 2. 系统核心
     opt:value("cpu", translate("💻 CPU Load"))
     opt:value("mem", translate("💾 RAM Usage"))
     opt:value("load", translate("⚙️ System Load"))
-    opt:value("temp_single", translate("🌡️ Single Temp")) -- 🌟 包含二级菜单
+    opt:value("temp_single", translate("🌡️ Single Temp")) 
     opt:value("uptime", translate("⏱️ System Uptime"))
 
     -- 3. 网络与流量 (网卡可选)
@@ -80,44 +78,37 @@ local function add_module_options(opt)
 end
 
 -- ==========================================
--- 🌟 2. 二级参数菜单：加入时间格式选项
+-- 🌟 2. 二级参数菜单：多合一动态参数列 (Combobox)
 -- ==========================================
 local function add_module_params(section)
-    -- [新增] 时间与日期专属下拉框
-    local o_time = section:option(ListValue, "param_time", translate("Display Format"))
-    o_time:depends("module", "time_group")
-    o_time.default = "timeBlink"
-    o_time:value("timeBlink", translate("⌚ Time (Blink)"))
-    o_time:value("time_sec", translate("⌚ Time (HH:MM:SS)"))
-    o_time:value("time", translate("⌚ Time (Static)"))
-    o_time:value("date", translate("📅 Date (MM-DD)"))
-    o_time:value("date_Y", translate("📅 Date (YYYY.MM.DD)"))
-    o_time:value("weekday", translate("🗓️ Week & Time (Cycle)"))
-    o_time:value("week_only", translate("🗓️ Day of Week"))
+    -- 使用 Value，配合 :value() 注入，LuCI 会自动渲染成下拉组合框
+    local o_param = section:option(Value, "param", translate("Module Parameter"))
+    o_param.description = translate("Select or type the parameter for the module. Leave empty if none.")
+    o_param.rmempty = true
+    
+    -- 🕒 【时间类参数】
+    o_param:value("timeBlink", translate("⌚ [Time] Blink (Default)"))
+    o_param:value("time_sec",  translate("⌚ [Time] HH:MM:SS"))
+    o_param:value("time",      translate("⌚ [Time] Static"))
+    o_param:value("date",      translate("📅 [Date] MM-DD"))
+    o_param:value("date_Y",    translate("📅 [Date] YYYY.MM.DD"))
+    o_param:value("weekday",   translate("🗓️ [Week] Week & Time (Cycle)"))
+    o_param:value("week_only", translate("🗓️ [Week] Day of Week"))
 
-    -- [保留] 单体温度专属下拉框
-    local o_temp = section:option(ListValue, "param_temp", translate("Target Sensor"))
-    o_temp:depends("module", "temp_single")
-    o_temp.default = "4"
-    o_temp:value("0", translate("NSS-Top"))
-    o_temp:value("1", translate("NSS"))
-    o_temp:value("2", translate("Wi-Fi PHY0"))
-    o_temp:value("3", translate("Wi-Fi PHY1"))
-    o_temp:value("4", translate("CPU"))
-    o_temp:value("5", translate("LPASS"))
-    o_temp:value("6", translate("DDR"))
+    -- 🌡️ 【温度类参数】
+    o_param:value("4", translate("🌡️ [Temp] CPU"))
+    o_param:value("0", translate("🌡️ [Temp] NSS-Top"))
+    o_param:value("1", translate("🌡️ [Temp] NSS"))
+    o_param:value("2", translate("🌡️ [Temp] Wi-Fi PHY0"))
+    o_param:value("3", translate("🌡️ [Temp] Wi-Fi PHY1"))
+    o_param:value("5", translate("🌡️ [Temp] LPASS"))
+    o_param:value("6", translate("🌡️ [Temp] DDR"))
 
-    -- [保留] 独立网卡专属下拉框
-    local o_net = section:option(Value, "param_net", translate("Target Interface"))
-    o_net:depends("module", "netspeed_down")
-    o_net:depends("module", "netspeed_up")
-    o_net:depends("module", "traffic_down")
-    o_net:depends("module", "traffic_up")
-    o_net:depends("module", "traffic_total")
-    o_net:depends("module", "traffic_split")
-    o_net.placeholder = "br-lan"
+    -- 🌐 【网卡类参数】
     for _, dev in ipairs(sys.net.devices()) do
-        if dev ~= "lo" then o_net:value(dev) end
+        if dev ~= "lo" then 
+            o_param:value(dev, translate("🌐 [Net] ") .. dev) 
+        end
     end
 end
 
@@ -139,7 +130,6 @@ s2.template = "cbi/tblsection"
 s2.anonymous = true
 s2.addremove = true
 s2.sortable = true
-
 
 o = s2:option(ListValue, "channel", translate("Channel ID"))
 for i = 1, 8 do o:value(tostring(i), translate("Channel ") .. i) end
@@ -186,25 +176,6 @@ o.default = "http://checkip.amazonaws.com"
 s = m:section(NamedSection, "general", "settings", translate("Sensor & Weather"))
 s.anonymous = true
 s.addremove = false
-
--- ============================================================
--- ⚠️ [V2.0 遗留兼容] 以下全局温度传感器多选框已在前端隐藏
--- V2.0 起已由 temp_single 模块的动态二级菜单完全接管。
--- 保留代码注释，仅供向下兼容及未来调试参考。
--- ============================================================
---[[
-o = s:option(MultiValue, "temp_sensors", translate("Temperature Sensors"))
-o.widget = "checkbox"
-o.default = "4"
-o:value("0", translate("nss-top"))
-o:value("1", translate("nss"))
-o:value("2", translate("wcss-phya0"))
-o:value("3", translate("wcss-phya1"))
-o:value("4", translate("cpu"))
-o:value("5", translate("lpass"))
-o:value("6", translate("ddrss"))
-o.description = translate("Select sensors to cycle through.")
-]]--
 
 -- 天气源
 o = s:option(ListValue, "weather_source", translate("Weather Source"))
@@ -321,8 +292,8 @@ btn_restart = s:option(Button, "_restart", translate("Restart Service"))
 btn_restart.inputstyle = "apply"
 btn_restart.description = translate("Force restart the process immediately.")
 function btn_restart.write(self, section)
-    luci.sys.call("/etc/init.d/athena_led restart >/dev/null 2>&1")
-    luci.http.redirect(luci.dispatcher.build_url("admin", "services", "athena_led"))
+    sys.call("/etc/init.d/athena_led restart >/dev/null 2>&1")  -- 🌟 使用上方引入的 sys
+    http.redirect(dispatcher.build_url("admin", "services", "athena_led")) -- 🌟 使用上方引入的 http 和 dispatcher
 end
 
 -- 停止按钮
@@ -330,8 +301,8 @@ btn_stop = s:option(Button, "_stop", translate("Stop Service"))
 btn_stop.inputstyle = "remove"
 btn_stop.description = translate("Stop the process (Will restart on reboot if Enabled is checked).")
 function btn_stop.write(self, section)
-    luci.sys.call("/etc/init.d/athena_led stop >/dev/null 2>&1")
-    luci.http.redirect(luci.dispatcher.build_url("admin", "services", "athena_led"))
+    sys.call("/etc/init.d/athena_led stop >/dev/null 2>&1")
+    http.redirect(dispatcher.build_url("admin", "services", "athena_led"))
 end
 
 return m

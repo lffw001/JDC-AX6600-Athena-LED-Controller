@@ -22,24 +22,14 @@ chan_8=""
 
 parse_single() {
     local cfg="$1"
-    local module duration param_time param_temp param_net param
+    local module duration param
     config_get module "$cfg" 'module' ''
     config_get duration "$cfg" 'duration' '5'
     
-    # 获取二级菜单参数
-    config_get param_time "$cfg" 'param_time' ''
-    config_get param_temp "$cfg" 'param_temp' ''
-    config_get param_net "$cfg" 'param_net' ''
+    # 🌟 直接获取统一的 param，再也不需要分别读三个变量了！
+    config_get param "$cfg" 'param' ''
 
     [ -z "$module" ] && return
-
-    # 🌟 智能匹配与防脏数据过滤
-    param=""
-    case "$module" in
-        time_group) param="$param_time" ;;
-        temp_single) param="$param_temp" ;;
-        netspeed_down|netspeed_up|traffic_down|traffic_up|traffic_total|traffic_split) param="$param_net" ;;
-    esac
 
     # 拼接最终指令 (格式: 模块:参数#时长)
     local str="${module}"
@@ -51,25 +41,15 @@ parse_single() {
 
 parse_multi() {
     local cfg="$1"
-    local channel module duration param_time param_temp param_net param
+    local channel module duration param
     config_get channel "$cfg" 'channel' '1'
     config_get module "$cfg" 'module' ''
     config_get duration "$cfg" 'duration' '5'
     
-    # 获取二级菜单参数
-    config_get param_time "$cfg" 'param_time' ''
-    config_get param_temp "$cfg" 'param_temp' ''
-    config_get param_net "$cfg" 'param_net' ''
+    # 🌟 直接获取统一的 param
+    config_get param "$cfg" 'param' ''
 
     [ -z "$module" ] && return
-
-    # 🌟 智能匹配与防脏数据过滤
-    param=""
-    case "$module" in
-        time_group) param="$param_time" ;;
-        temp_single) param="$param_temp" ;;
-        netspeed_down|netspeed_up|traffic_down|traffic_up|traffic_total|traffic_split) param="$param_net" ;;
-    esac
 
     # 拼接最终指令 (格式: 模块:参数#时长)
     local str="${module}"
@@ -134,7 +114,7 @@ start_service() {
     fi
 
     # ==========================================
-    # 🌟 正式构建服务实例 (只能有一对 procd_open 和 close)
+    # 🌟 正式构建服务实例
     # ==========================================
     procd_open_instance
     procd_set_param command "$PROG"
