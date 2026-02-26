@@ -734,6 +734,7 @@ impl SystemMonitor {
 
         // --- 真的去请求网络 ---
         // 注意：这里用参数里的 ip_url，不要用 self.ip_url 了（如果你之前存了的话）
+        #[cfg(debug_assertions)]
         println!("DEBUG: Fetching IP from network..."); 
         
         let mut new_ip = "IP:Err".to_string();
@@ -815,36 +816,52 @@ impl SystemMonitor {
         }
 
         // ==========================================
-        // 🌟 [新增] 紫辰精准 IP 定位 (直接保存和使用纯中文)
+        // 🌟 [新增] 紫辰精准 IP 定位 (加固版)
         // ==========================================
         let mut target_location = location.to_string();
         if target_location.to_lowercase() == "auto" || target_location.is_empty() {
             if self.auto_location.is_empty() {
-                if let Ok(resp) = reqwest::get("http://app.zichen.zone/api/geoip/api.php").await {
-                    if let Ok(text) = resp.text().await {
-                        if let Some(city_part) = text.split("\"city\"").nth(1) {
-                            if let Some(city) = city_part.split('"').nth(1) {
-                                let trimmed = city.trim().to_string();
-                                if !trimmed.is_empty() {
-                                    // 直接存中文，不搞花里胡哨的转码！
-                                    self.auto_location = trimmed;
-                                    println!("🌍 [智能天气] 紫辰定位成功: {}", self.auto_location);
+                // 1. 构建带伪装和超时的 Client（防止路由器无限卡死）
+                let client = reqwest::Client::builder()
+                    .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Athena-LED/2.0")
+                    .timeout(std::time::Duration::from_secs(5))
+                    .build()
+                    .unwrap_or_default();
+
+                // 2. 发起请求并捕获错误
+                match client.get("http://app.zichen.zone/api/geoip/api.php").send().await {
+                    Ok(resp) => {
+                        if let Ok(text) = resp.text().await {
+                            #[cfg(debug_assertions)]
+                            println!("🌍 [定位调试] 紫辰原始返回: {}", text); // 👈 关键！看这里到底返回了啥
+                            
+                            // 3. 提取 city
+                            if let Some(city_part) = text.split("\"city\"").nth(1) {
+                                if let Some(city) = city_part.split('"').nth(1) {
+                                    let trimmed = city.trim().to_string();
+                                    if !trimmed.is_empty() {
+                                        self.auto_location = trimmed;
+                                        #[cfg(debug_assertions)]
+                                        println!("✅ [定位成功] 城市: {}", self.auto_location);
+                                    }
                                 }
                             }
                         }
                     }
+                    Err(e) => println!("❌ [定位失败] 网络请求报错: {}", e),
                 }
             }
             
-            // 兜底策略：如果定位失败，给个默认城市（比如北京）
+            // 兜底策略
             target_location = if self.auto_location.is_empty() { 
+                #[cfg(debug_assertions)]
+                println!("⚠️ [定位兜底] 启用默认城市: 北京");
                 "北京".to_string() 
             } else { 
                 self.auto_location.clone() 
             };
         }
         // ==========================================
-
         // 🌟 [新增] 默认数据源接管
         // 如果用户没选数据源，或者填了 auto，直接强制使用 uapis
         let target_source = if source.is_empty() || source == "auto" { 
@@ -902,12 +919,14 @@ impl SystemMonitor {
     async fn get_weather_from_wttr(&self, city: &str) -> String {
         // format=j1 返回 JSON
         let url = format!("https://wttr.in/{}?format=j1", city);
+        #[cfg(debug_assertions)]
         println!("DEBUG: Requesting Wttr: {}", url); // [调试]
 
         match self.http_client.get(&url).send().await {
             Ok(resp) => {
                 // 1. 检查 HTTP 状态码 (关键！wttr 经常封 IP 返回 429 或 503)
                 if !resp.status().is_success() {
+                    #[cfg(debug_assertions)]
                     println!("DEBUG: Wttr failed status: {}", resp.status());
                     return format!("W:Err({})", resp.status().as_u16());
                 }
@@ -1337,20 +1356,23 @@ async fn main() -> Result<()> {
 }
 
 // ==========================================
-// 🐧 Linux 环境下的【零分配 + 优雅退出版】监听器
+// 🐧 Linux 环境下的【长短按分离 + 睡眠感知】监听器
 // ==========================================
 #[cfg(unix)]
 fn spawn_button_listener(
     tx: tokio::sync::watch::Sender<i32>, 
-    running: std::sync::Arc<std::sync::atomic::AtomicBool> // 🌟 增加参数
+    running: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    // 🌟 [可选] 如果你想让按键感知当前是否在休眠，可以传这个参数；
+    // 也可以不传，全靠发送不同的 i32 信号让主线程去判断。
+    // 这里我们假设直接通过 tx 发送特定的特殊值来通信。
 ) {
     use std::fs::File;
     use std::io::{Read, Seek, SeekFrom};
-    use std::time::Duration;
-    use std::sync::atomic::Ordering; // 🌟 引入内存顺序规范
+    use std::time::{Duration, Instant};
+    use std::sync::atomic::Ordering;
 
     tokio::task::spawn_blocking(move || {
-        println!("🎮 [系统] 启动终极 GPIO71 硬件雷达监听模式...");
+        println!("🎮 [系统] 启动终极 GPIO71 硬件雷达监听模式 (支持长短按分离)...");
 
         let mut file = match File::open("/sys/kernel/debug/gpio") {
             Ok(f) => f,
@@ -1361,35 +1383,69 @@ fn spawn_button_listener(
         };
 
         let mut buffer = String::with_capacity(4096);
-        let mut was_pressed = false;
+        
+        // 🌟 状态机变量
+        let mut press_start: Option<Instant> = None;
+        let mut long_press_handled = false;
 
-        // 🌟 将 loop 替换为 while，每次循环检查开关状态
         while running.load(Ordering::SeqCst) {
             buffer.clear();
             let _ = file.seek(SeekFrom::Start(0));
 
             if file.read_to_string(&mut buffer).is_ok() {
+                // 判断当前物理引脚是否处于低电平（按下状态）
                 let is_pressed = buffer.contains("gpio71  : in  low");
 
-                if !was_pressed && is_pressed {
-                    println!("💡 [DEBUG] 拦截到 GPIO71 按下！强制切换屏幕！");
-                    
-                    let current = *tx.borrow();
-                    if current > 0 { 
-                        let _ = tx.send(current + 1); 
+                if is_pressed {
+                    // 1️⃣ 刚刚按下瞬间，记录时间点
+                    if press_start.is_none() {
+                        press_start = Some(Instant::now());
+                        long_press_handled = false;
+                    } 
+                    // 2️⃣ 一直按着没松手，检查是否达到长按阈值 (比如 2 秒)
+                    else if !long_press_handled {
+                        if press_start.unwrap().elapsed() >= Duration::from_secs(2) {
+                            #[cfg(debug_assertions)]
+                            println!("🌙 [硬件交互] 检测到长按 2 秒！发送息屏/亮屏切换指令！");
+                            
+                            // 🌟 约定 -1 为“休眠/唤醒”的 Toggle 指令
+                            let _ = tx.send(-1); 
+                            
+                            // 标记已处理，防止一直触发
+                            long_press_handled = true; 
+                        }
                     }
-                    
-                    std::thread::sleep(Duration::from_millis(300));
+                } else {
+                    // 3️⃣ 松开按键
+                    if let Some(start) = press_start {
+                        let hold_time = start.elapsed();
+                        
+                        // 如果没有触发过长按，并且按下的时间大于 50ms (防物理抖动)
+                        if !long_press_handled && hold_time > Duration::from_millis(50) {
+                            #[cfg(debug_assertions)]
+                            println!("➡️ [硬件交互] 短按触发！准备切换频道...");
+                            
+                            let current = *tx.borrow();
+                            // 如果当前处于休眠状态 (比如你的主线程里把状态设为了负数)，短按直接唤醒，从 1 开始
+                            if current < 0 {
+                                println!("☀️ [硬件交互] 夜间休眠被打断，唤醒屏幕！");
+                                let _ = tx.send(1);
+                            } else {
+                                // 正常切台
+                                let _ = tx.send(current + 1);
+                            }
+                        }
+                        
+                        // 重置状态机，准备迎接下一次按键
+                        press_start = None;
+                    }
                 }
-                
-                was_pressed = is_pressed;
             }
 
-            // 100ms 轮询
+            // 保持 100ms 的轮询频率，兼顾灵敏度与低 CPU 占用
             std::thread::sleep(Duration::from_millis(100));
         }
 
-        // 🌟 循环结束后打印，证明线程已关闭
         println!("👋 [系统] 按钮监听线程已安全退出。");
     });
 }
@@ -1424,7 +1480,6 @@ async fn process_loop(
         for m_str in p_str.split_whitespace() {
             let parts: Vec<&str> = m_str.split('#').collect();
             let name = parts[0].to_string();
-            // 如果加了 #数字，就用数字作为时长，否则用全局默认 seconds
             let duration = if parts.len() > 1 {
                 parts[1].parse::<u64>().unwrap_or(args.seconds)
             } else {
@@ -1437,30 +1492,43 @@ async fn process_loop(
 
     let profiles_count = profiles.len();
     let mut current_profile_idx = 0;
+    
+    // 🌟 [新增] 夜间被按键唤醒后的“临时免死金牌”时间
+    let mut manual_wake_expire: Option<std::time::Instant> = None;
 
     // --- 2. 状态机死循环 ---
     loop {
-        // [处理长按息屏]
+        // 🌟 [处理长按息屏] (由监听器发送 -1 触发)
         if *rx.borrow() < 0 {
-            screen.write_data(b"        ", 0).await?; 
+            let _ = screen.write_data(b"        ", 0).await; 
             screen.power(false, 0)?; 
+            // 陷入沉睡，直到监听到大于 0 的短按唤醒信号
             let _ = rx.wait_for(|&val| val > 0).await; 
             screen.power(true, args.light_level)?; 
             continue; 
         }
 
-        // [处理夜间休眠]
-        if is_sleep_time(&args.sleep_start, &args.sleep_end) {
-            screen.write_data(b"        ", 0).await?; 
+        // 🌟 [新增] 判断当前是否处于“临时唤醒”保护期
+        let is_manual_awake = manual_wake_expire.map_or(false, |exp| exp > std::time::Instant::now());
+
+        // 🌟 [处理夜间休眠] (仅在保护期外，且满足时间时才休眠)
+        if !is_manual_awake && is_sleep_time(&args.sleep_start, &args.sleep_end) {
+            let _ = screen.write_data(b"        ", 0).await; 
             screen.power(false, 0)?; 
             let sleep_sec = get_seconds_until_wake(&args.sleep_end);
+            
             tokio::select! {
+                // 1. 正常睡到天亮自动醒
                 _ = tokio::time::sleep(tokio::time::Duration::from_secs(sleep_sec)) => {
                     screen.power(true, args.light_level)?;
                     continue; 
                 }
+                // 2. 半夜被起夜的用户按了按钮
                 Ok(_) = rx.changed() => {
+                    println!("☀️ [硬件交互] 夜间休眠被打断，临时点亮屏幕 60 秒！");
                     screen.power(true, args.light_level)?; 
+                    // 赋予 60 秒免死金牌，这 60 秒内正常轮播配置
+                    manual_wake_expire = Some(std::time::Instant::now() + std::time::Duration::from_secs(60));
                     continue; 
                 }
             }
