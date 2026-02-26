@@ -1353,7 +1353,7 @@ async fn main() -> Result<()> {
     // ==========================================
     // 🌟 启动监听器（有且只能调用一次！）
     // ==========================================
-    spawn_button_listener(tx.clone(), running_for_listener);
+    spawn_button_listener(tx.clone(), running_for_listener, args.button_gpio.clone());
     
 
 
@@ -1517,7 +1517,8 @@ tokio::task::spawn_blocking(move || {
 // 🌟 增加第二个参数声明，哪怕不用它，也要让签名保持一致
 fn spawn_button_listener(
     _tx: tokio::sync::watch::Sender<i32>, 
-    _running: std::sync::Arc<std::sync::atomic::AtomicBool>
+    _running: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    _gpio_pin: String
 ) {
     // Windows 模拟器不需要物理按键监听，所以这里保持空或者加行打印
     println!("📺 [Windows 模拟器] 按键监听已就绪（空跑模式）");
