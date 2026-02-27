@@ -1834,26 +1834,28 @@ async fn process_loop(
                     text_to_show = txt;
                 }
                 // ==========================================
-                // 🎬 动画模块专属分支
+                // 🎬 动画模块专属分支 (支持按键秒切)
                 // ==========================================
                 "anim" => {
-                    // 1. 获取文件名 (新架构下对应 param 字段)
                     let file_name = module.param.clone(); 
         
                     if file_name.is_empty() {
                         eprintln!("⚠️ 警告: 动画模块未指定文件");
                         text_to_show = "NO FILE".to_string();
                     } else {
-                        // 2. 直接获取该模块的持续时间 (u64)
                         let duration_secs = module.duration;
-                        let status_leds = get_leds(monitor, args);
             
-                        // 3. 将控制权完全交给我们的“无情推流机器”！
-                        let _ = screen.play_animation(&file_name, duration_secs, status_leds).await;
-            
-                        // 🌟 魔法发生地：
-                        // 动画播完后，因为我们没有给 text_to_show 赋值（依然是空），
-                        // 所以会自动跳过底部的 if !text_to_show.is_empty() 渲染块，无缝衔接下一个模块！
+                        // 🌟 核心修复：引入 tokio::select! 神级打断机制
+                        tokio::select! {
+                            // 🏃‍♂️ 赛道 1：默默播放动画，播满设定的时长后自然结束
+                            _ = screen.play_animation(&file_name, duration_secs, get_leds(monitor, args)) => {}
+                            
+                            // 🏃‍♂️ 赛道 2：按键狙击手！一旦检测到按键被按下，瞬间“击杀”赛道 1 的动画进程！
+                            Ok(_) = rx.changed() => {
+                                module_interrupted = true;
+                                // 打上中断标记后跳出 select，外层的打断接管逻辑会立刻执行切台！
+                            }
+                        }
                     }
                 }
                 _ => {

@@ -65,3 +65,10 @@ tools/venv/
 tools/env/
 tools/.env/
 
+# 忽略所有测试用的原视频和转换后的二进制流
+*.mp4
+*.bin
+
+# 🌟 但是！强行放行预制在 LuCI 安装包里的精选动画！(白名单)
+!luci-app-athena-led/root/etc/athena_led/anim/*.bin
+
