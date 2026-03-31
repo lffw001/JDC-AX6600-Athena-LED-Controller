@@ -14,7 +14,7 @@ function index()
     -- 1. 主菜单入口
     -- 我把它改到了 "Services" (服务) 下，这样更符合 OpenWrt 插件规范
     -- firstchild() 表示点击这个菜单时，自动跳到第一个子菜单(Settings)
-    entry({"admin", "services", "athena_led"}, firstchild(), _("雅典娜LED控制"), 60).dependent = false
+    entry({"admin", "services", "athena_led"}, cbi("athena_led"), _("Athena LED Controller"), 60)
 
     -- 2. 设置页面 (Settings)
     -- 指向 model/cbi/athena_led/settings.lua
